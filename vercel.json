@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "env": {
+    "NEXT_PUBLIC_API_URL": "https://your-app.fly.dev"
+  },
+  "build": {
+    "env": {
+      "NEXT_PUBLIC_API_URL": "https://your-app.fly.dev"
+    }
+  }
+}
