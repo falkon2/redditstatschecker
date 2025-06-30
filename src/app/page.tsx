@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://servicebackendrender.onrender.com';
@@ -15,64 +15,56 @@ interface UserProfile {
   total_comments: number;
 }
 
-export default function Home() {
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+// Separate component to handle search params
+function AuthHandler({ 
+  onSessionReceived, 
+  onError 
+}: { 
+  onSessionReceived: (session: string) => void;
+  onError: (error: string) => void;
+}) {
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
-    // Check for existing session
-    const savedSessionId = localStorage.getItem('reddit_session_id');
-    if (savedSessionId) {
-      setSessionId(savedSessionId);
-      fetchUserProfile(savedSessionId);
-    }
-
-    // Handle OAuth2 callback
     const session = searchParams.get('session');
     const authError = searchParams.get('error');
 
     if (session) {
-      localStorage.setItem('reddit_session_id', session);
-      setSessionId(session);
-      fetchUserProfile(session);
+      onSessionReceived(session);
       router.replace('/');
     } else if (authError) {
-      setError(`Authentication failed: ${authError}`);
+      onError(`Authentication failed: ${authError}`);
     }
-  }, [searchParams, router]);
+  }, [searchParams, router, onSessionReceived, onError]);
 
-  const fetchUserProfile = async (sessionId: string) => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/profile?session_id=${sessionId}`);
-      
-      if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('reddit_session_id');
-          setSessionId(null);
-          return;
-        }
-        throw new Error(`HTTP ${response.status}`);
-      }
+  return null;
+}
 
-      const profile = await response.json();
-      setUserProfile(profile);
-    } catch (err) {
-      setError('Failed to load profile');
-      localStorage.removeItem('reddit_session_id');
-      setSessionId(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+function HomeContent({ 
+  sessionId, 
+  userProfile, 
+  loading, 
+  error, 
+  setError, 
+  setSessionId, 
+  setUserProfile, 
+  fetchUserProfile 
+}: {
+  sessionId: string | null;
+  userProfile: UserProfile | null;
+  loading: boolean;
+  error: string | null;
+  setError: (error: string | null) => void;
+  setSessionId: (sessionId: string | null) => void;
+  setUserProfile: (profile: UserProfile | null) => void;
+  fetchUserProfile: (sessionId: string) => Promise<void>;
+}) {
+  const [localLoading, setLocalLoading] = useState(false);
 
   const handleLogin = async () => {
     try {
-      setLoading(true);
+      setLocalLoading(true);
       const response = await fetch(`${API_BASE_URL}/auth/login`);
       
       if (!response.ok) {
@@ -83,7 +75,7 @@ export default function Home() {
       window.location.href = auth_url;
     } catch (err) {
       setError('Login failed');
-      setLoading(false);
+      setLocalLoading(false);
     }
   };
 
@@ -103,7 +95,7 @@ export default function Home() {
   };
 
   // Loading state
-  if (loading) {
+  if (loading || localLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
@@ -239,5 +231,82 @@ export default function Home() {
         </div>
       </main>
     </div>
+  );
+}
+
+export default function Home() {
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSessionReceived = (session: string) => {
+    localStorage.setItem('reddit_session_id', session);
+    setSessionId(session);
+    fetchUserProfile(session);
+  };
+
+  const handleAuthError = (errorMessage: string) => {
+    setError(errorMessage);
+  };
+
+  const fetchUserProfile = async (sessionId: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE_URL}/api/profile?session_id=${sessionId}`);
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem('reddit_session_id');
+          setSessionId(null);
+          return;
+        }
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const profile = await response.json();
+      setUserProfile(profile);
+    } catch (err) {
+      setError('Failed to load profile');
+      localStorage.removeItem('reddit_session_id');
+      setSessionId(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // Check for existing session
+    const savedSessionId = localStorage.getItem('reddit_session_id');
+    if (savedSessionId) {
+      setSessionId(savedSessionId);
+      fetchUserProfile(savedSessionId);
+    }
+  }, []);
+
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AuthHandler 
+        onSessionReceived={handleSessionReceived} 
+        onError={handleAuthError} 
+      />
+      <HomeContent 
+        sessionId={sessionId}
+        userProfile={userProfile}
+        loading={loading}
+        error={error}
+        setError={setError}
+        setSessionId={setSessionId}
+        setUserProfile={setUserProfile}
+        fetchUserProfile={fetchUserProfile}
+      />
+    </Suspense>
   );
 }
