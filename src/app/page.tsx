@@ -1,9 +1,7 @@
 'use client';
 
 import { useEffect, useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://servicebackendrender.onrender.com';
+import { useSearchParams } from 'next/navigation';
 
 interface UserProfile {
   username: string;
@@ -15,298 +13,274 @@ interface UserProfile {
   total_comments: number;
 }
 
-// Separate component to handle search params
-function AuthHandler({ 
-  onSessionReceived, 
-  onError 
-}: { 
-  onSessionReceived: (session: string) => void;
-  onError: (error: string) => void;
-}) {
+function HomePage() {
   const searchParams = useSearchParams();
-  const router = useRouter();
-
-  useEffect(() => {
-    const session = searchParams.get('session');
-    const authError = searchParams.get('error');
-
-    if (session) {
-      onSessionReceived(session);
-      router.replace('/');
-    } else if (authError) {
-      onError(`Authentication failed: ${authError}`);
-    }
-  }, [searchParams, router, onSessionReceived, onError]);
-
-  return null;
-}
-
-function HomeContent({ 
-  sessionId, 
-  userProfile, 
-  loading, 
-  error, 
-  setError, 
-  setSessionId, 
-  setUserProfile, 
-  fetchUserProfile 
-}: {
-  sessionId: string | null;
-  userProfile: UserProfile | null;
-  loading: boolean;
-  error: string | null;
-  setError: (error: string | null) => void;
-  setSessionId: (sessionId: string | null) => void;
-  setUserProfile: (profile: UserProfile | null) => void;
-  fetchUserProfile: (sessionId: string) => Promise<void>;
-}) {
-  const [localLoading, setLocalLoading] = useState(false);
-
-  const handleLogin = async () => {
-    try {
-      setLocalLoading(true);
-      const response = await fetch(`${API_BASE_URL}/auth/login`);
-      
-      if (!response.ok) {
-        throw new Error('Failed to login');
-      }
-
-      const { auth_url } = await response.json();
-      window.location.href = auth_url;
-    } catch (err) {
-      setError('Login failed');
-      setLocalLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    if (sessionId) {
-      try {
-        await fetch(`${API_BASE_URL}/auth/logout?session_id=${sessionId}`, {
-          method: 'DELETE'
-        });
-      } catch (err) {
-        console.error('Logout error:', err);
-      }
-    }
-    localStorage.removeItem('reddit_session_id');
-    setSessionId(null);
-    setUserProfile(null);
-  };
-
-  // Loading state
-  if (loading || localLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="text-red-500 text-xl mb-4">❌ Error</div>
-          <p className="text-red-600 mb-4">{error}</p>
-          <button
-            onClick={() => {
-              setError(null);
-              setSessionId(null);
-              localStorage.removeItem('reddit_session_id');
-            }}
-            className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600"
-          >
-            Try Again
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Login screen
-  if (!sessionId || !userProfile) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-orange-50 to-red-100">
-        <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 mx-4">
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-orange-500 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="text-white text-2xl">🤖</span>
-            </div>
-            <h1 className="text-3xl font-bold text-gray-800 mb-2">Reddit Stats</h1>
-            <p className="text-gray-600">Secure OAuth2 Login</p>
-          </div>
-
-          <button
-            onClick={handleLogin}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-3"
-          >
-            <span>🔗</span>
-            <span>Login with Reddit</span>
-          </button>
-
-          <div className="mt-6 p-4 bg-blue-50 rounded-lg">
-            <h3 className="text-sm font-semibold text-blue-800 mb-2">🔒 Secure OAuth2</h3>
-            <ul className="text-xs text-blue-600 space-y-1">
-              <li>• Redirects to Reddit's secure login</li>
-              <li>• No password sharing with this app</li>
-              <li>• Temporary access only</li>
-            </ul>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Dashboard
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-100">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex justify-between items-center">
-          <div className="flex items-center space-x-3">
-            <span className="text-2xl">🤖</span>
-            <div>
-              <h1 className="text-xl font-bold text-gray-800">Reddit Stats</h1>
-              <p className="text-sm text-gray-600">u/{userProfile.username}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition-colors"
-          >
-            Logout
-          </button>
-        </div>
-      </header>
-
-      {/* Stats */}
-      <main className="max-w-4xl mx-auto px-4 py-8">
-        <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">Your Reddit Stats</h2>
-          
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="bg-purple-100 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-purple-600">{userProfile.total_karma.toLocaleString()}</div>
-              <div className="text-sm text-purple-800">Total Karma</div>
-            </div>
-            
-            <div className="bg-blue-100 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-blue-600">{userProfile.link_karma.toLocaleString()}</div>
-              <div className="text-sm text-blue-800">Link Karma</div>
-            </div>
-            
-            <div className="bg-green-100 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-green-600">{userProfile.comment_karma.toLocaleString()}</div>
-              <div className="text-sm text-green-800">Comment Karma</div>
-            </div>
-            
-            <div className="bg-orange-100 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-orange-600">{userProfile.account_created}</div>
-              <div className="text-sm text-orange-800">Account Created</div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 mt-4">
-            <div className="bg-indigo-100 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-indigo-600">{userProfile.total_posts.toLocaleString()}</div>
-              <div className="text-sm text-indigo-800">Total Posts</div>
-            </div>
-            
-            <div className="bg-teal-100 p-4 rounded-lg text-center">
-              <div className="text-2xl font-bold text-teal-600">{userProfile.total_comments.toLocaleString()}</div>
-              <div className="text-sm text-teal-800">Total Comments</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="text-center">
-          <p className="text-gray-600 text-sm">
-            ✅ OAuth2 working! Backend: {API_BASE_URL}
-          </p>
-        </div>
-      </main>
-    </div>
-  );
-}
-
-export default function Home() {
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
-  const handleSessionReceived = (session: string) => {
-    localStorage.setItem('reddit_session_id', session);
-    setSessionId(session);
-    fetchUserProfile(session);
-  };
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://servicebackendrender.onrender.com';
 
-  const handleAuthError = (errorMessage: string) => {
-    setError(errorMessage);
-  };
+  useEffect(() => {
+    const sessionId = searchParams.get('session');
+    const errorParam = searchParams.get('error');
 
-  const fetchUserProfile = async (sessionId: string) => {
+    if (errorParam) {
+      setError(`Authentication failed: ${errorParam}`);
+      return;
+    }
+
+    if (sessionId) {
+      setIsAuthenticated(true);
+      fetchProfile(sessionId);
+    }
+  }, [searchParams]);
+
+  const fetchProfile = async (sessionId: string) => {
+    setLoading(true);
+    setError(null);
+    
     try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/api/profile?session_id=${sessionId}`);
+      const response = await fetch(`${API_URL}/api/profile?session_id=${sessionId}`);
       
       if (!response.ok) {
-        if (response.status === 401) {
-          localStorage.removeItem('reddit_session_id');
-          setSessionId(null);
-          return;
-        }
-        throw new Error(`HTTP ${response.status}`);
+        throw new Error(`Failed to fetch profile: ${response.status}`);
       }
-
-      const profile = await response.json();
-      setUserProfile(profile);
+      
+      const profileData = await response.json();
+      setProfile(profileData);
     } catch (err) {
-      setError('Failed to load profile');
-      localStorage.removeItem('reddit_session_id');
-      setSessionId(null);
+      setError(err instanceof Error ? err.message : 'Failed to fetch profile');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    // Check for existing session
-    const savedSessionId = localStorage.getItem('reddit_session_id');
-    if (savedSessionId) {
-      setSessionId(savedSessionId);
-      fetchUserProfile(savedSessionId);
+  const initiateLogin = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const response = await fetch(`${API_URL}/auth/login`);
+      
+      if (!response.ok) {
+        throw new Error('Failed to initiate login');
+      }
+      
+      const { auth_url } = await response.json();
+      window.location.href = auth_url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to initiate login');
+      setLoading(false);
     }
-  }, []);
+  };
+
+  const LoadingComponent = () => (
+    <div className="flex items-center justify-center space-x-2">
+      <div className="loading-bars">
+        <div className="loading-bar"></div>
+        <div className="loading-bar"></div>
+        <div className="loading-bar"></div>
+        <div className="loading-bar"></div>
+        <div className="loading-bar"></div>
+      </div>
+      <span className="text-cyber-primary ml-4 terminal-text">SCANNING NEURAL PATHWAYS...</span>
+    </div>
+  );
 
   return (
+    <div className="min-h-screen relative">
+      {/* Cyberpunk Grid Background */}
+      <div className="cyber-grid"></div>
+      
+      {/* Main Container */}
+      <div className="relative z-10 container mx-auto px-4 py-8">
+        {/* Header */}
+        <header className="text-center mb-12">
+          <h1 className="glitch text-6xl md:text-8xl mb-4 font-bold" data-text="REDDIT NEURAL INTERFACE">
+            REDDIT NEURAL INTERFACE
+          </h1>
+          <p className="text-cyber-dim text-lg md:text-xl font-mono">
+            &gt; ACCESSING DIGITAL FOOTPRINT DATABASE...
+          </p>
+          <div className="mt-4 text-cyber-accent terminal-text">
+            [SYSTEM STATUS: ONLINE] [ENCRYPTION: ACTIVE] [CONNECTION: SECURE]
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="max-w-4xl mx-auto">
+          {!isAuthenticated && !loading && (
+            <div className="text-center">
+              <div className="cyber-card p-8 mb-8">
+                <h2 className="text-3xl font-bold text-cyber-primary mb-6 font-mono">
+                  NEURAL LINK REQUIRED
+                </h2>
+                <p className="text-cyber-text mb-8 text-lg">
+                  Establish secure connection to Reddit mainframe to access your digital persona metrics.
+                </p>
+                <button 
+                  onClick={initiateLogin}
+                  className="cyber-btn text-lg px-8 py-4"
+                  disabled={loading}
+                >
+                  INITIATE NEURAL HANDSHAKE
+                </button>
+              </div>
+              
+              {/* Terminal Info */}
+              <div className="cyber-card p-6 text-left">
+                <div className="terminal-text text-sm space-y-2">
+                  <div>&gt; reddit_stats --version 2.0.0</div>
+                  <div>&gt; security_protocol: OAuth2.0_Authorization_Code_Flow</div>
+                  <div>&gt; encryption: AES-256</div>
+                  <div>&gt; data_access: READ_ONLY</div>
+                  <div>&gt; privacy_mode: MAXIMUM</div>
+                  <div className="text-cyber-warning">&gt; warning: credentials never stored locally</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {loading && (
+            <div className="cyber-card p-12 text-center">
+              <LoadingComponent />
+            </div>
+          )}
+
+          {error && (
+            <div className="cyber-card p-6 border-cyber-danger bg-red-900/20">
+              <div className="text-cyber-danger font-mono">
+                <div className="text-lg font-bold mb-2">[ERROR] NEURAL LINK FAILED</div>
+                <div>{error}</div>
+              </div>
+            </div>
+          )}
+
+          {profile && (
+            <div className="space-y-6">
+              {/* User Header */}
+              <div className="cyber-card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-2xl font-bold text-cyber-primary font-mono">
+                    USER PROFILE: {profile.username}
+                  </h2>
+                  <div className="text-cyber-accent text-sm">
+                    SINCE: {profile.account_created}
+                  </div>
+                </div>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="cyber-card p-6 text-center">
+                  <div className="text-3xl font-bold text-cyber-primary neon-glow mb-2">
+                    {profile.total_karma.toLocaleString()}
+                  </div>
+                  <div className="text-cyber-dim font-mono">TOTAL KARMA</div>
+                </div>
+                
+                <div className="cyber-card p-6 text-center">
+                  <div className="text-3xl font-bold text-cyber-accent neon-glow mb-2">
+                    {profile.total_posts.toLocaleString()}
+                  </div>
+                  <div className="text-cyber-dim font-mono">TOTAL POSTS</div>
+                </div>
+                
+                <div className="cyber-card p-6 text-center">
+                  <div className="text-3xl font-bold text-cyber-secondary neon-glow mb-2">
+                    {profile.total_comments.toLocaleString()}
+                  </div>
+                  <div className="text-cyber-dim font-mono">TOTAL COMMENTS</div>
+                </div>
+                
+                <div className="cyber-card p-6 text-center">
+                  <div className="text-3xl font-bold text-cyber-warning neon-glow mb-2">
+                    {((profile.total_comments / (profile.total_posts || 1))).toFixed(1)}
+                  </div>
+                  <div className="text-cyber-dim font-mono">COMMENTS/POST</div>
+                </div>
+              </div>
+
+              {/* Detailed Stats */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="cyber-card p-6">
+                  <h3 className="text-xl font-bold text-cyber-primary mb-4 font-mono">
+                    KARMA BREAKDOWN
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-cyber-dim">Link Karma:</span>
+                      <span className="text-cyber-accent font-mono">{profile.link_karma.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-cyber-dim">Comment Karma:</span>
+                      <span className="text-cyber-secondary font-mono">{profile.comment_karma.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="cyber-card p-6">
+                  <h3 className="text-xl font-bold text-cyber-primary mb-4 font-mono">
+                    ACTIVITY METRICS
+                  </h3>
+                  <div className="space-y-3">
+                    <div className="flex justify-between">
+                      <span className="text-cyber-dim">Avg Karma/Post:</span>
+                      <span className="text-cyber-accent font-mono">
+                        {profile.total_posts > 0 ? (profile.link_karma / profile.total_posts).toFixed(1) : '0'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-cyber-dim">Avg Karma/Comment:</span>
+                      <span className="text-cyber-secondary font-mono">
+                        {profile.total_comments > 0 ? (profile.comment_karma / profile.total_comments).toFixed(1) : '0'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Terminal Output */}
+              <div className="cyber-card p-6">
+                <div className="terminal-text text-sm space-y-1">
+                  <div>&gt; neural_scan_complete</div>
+                  <div>&gt; user_profile_loaded: {profile.username}</div>
+                  <div>&gt; total_data_points: {(profile.total_posts + profile.total_comments).toLocaleString()}</div>
+                  <div>&gt; karma_efficiency: {(profile.total_karma / (profile.total_posts + profile.total_comments) || 0).toFixed(2)}</div>
+                  <div className="text-cyber-primary">&gt; status: ANALYSIS_COMPLETE</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer className="text-center mt-16 text-cyber-dim text-sm font-mono">
+          <div className="cyber-card p-4">
+            REDDIT NEURAL INTERFACE v2.0.0 | SECURE OAUTH2 PROTOCOL | NO DATA STORED
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+export default function Page() {
+  return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center">
-          <div className="w-8 h-8 border-4 border-orange-200 border-t-orange-500 rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading...</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="loading-bars">
+          <div className="loading-bar"></div>
+          <div className="loading-bar"></div>
+          <div className="loading-bar"></div>
+          <div className="loading-bar"></div>
+          <div className="loading-bar"></div>
         </div>
       </div>
     }>
-      <AuthHandler 
-        onSessionReceived={handleSessionReceived} 
-        onError={handleAuthError} 
-      />
-      <HomeContent 
-        sessionId={sessionId}
-        userProfile={userProfile}
-        loading={loading}
-        error={error}
-        setError={setError}
-        setSessionId={setSessionId}
-        setUserProfile={setUserProfile}
-        fetchUserProfile={fetchUserProfile}
-      />
+      <HomePage />
     </Suspense>
   );
 }
